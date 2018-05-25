@@ -526,7 +526,7 @@ static int parse_attach_list(struct Buffer *buf, struct Buffer *s,
 
 /**
  * parse_group_context - Parse a group context
- * @param ctx  GroupContext to add to
+ * @param ctx  GroupList to add to
  * @param buf  Temporary Buffer space
  * @param s    Buffer containing string to be parsed
  * @param data Flags associated with the command
@@ -534,7 +534,7 @@ static int parse_attach_list(struct Buffer *buf, struct Buffer *s,
  * @retval  0 Success
  * @retval -1 Error
  */
-static int parse_group_context(struct GroupContextHead *ctx, struct Buffer *buf,
+static int parse_group_context(struct GroupList *ctx, struct Buffer *buf,
                                struct Buffer *s, unsigned long data, struct Buffer *err)
 {
   while (mutt_str_strcasecmp(buf->data, "-group") == 0)
@@ -887,7 +887,7 @@ static int parse_alias(struct Buffer *buf, struct Buffer *s, unsigned long data,
 {
   struct Alias *tmp = NULL;
   char *estr = NULL;
-  struct GroupContextHead gc = STAILQ_HEAD_INITIALIZER(gc);
+  struct GroupList gc = STAILQ_HEAD_INITIALIZER(gc);
 
   if (!MoreArgs(s))
   {
@@ -966,7 +966,7 @@ bail:
 static int parse_alternates(struct Buffer *buf, struct Buffer *s,
                             unsigned long data, struct Buffer *err)
 {
-  struct GroupContextHead gc = STAILQ_HEAD_INITIALIZER(gc);
+  struct GroupList gc = STAILQ_HEAD_INITIALIZER(gc);
 
   alternates_clean();
 
@@ -1099,7 +1099,7 @@ static int parse_finish(struct Buffer *buf, struct Buffer *s,
 static int parse_group(struct Buffer *buf, struct Buffer *s, unsigned long data,
                        struct Buffer *err)
 {
-  struct GroupContextHead gc = STAILQ_HEAD_INITIALIZER(gc);
+  struct GroupList gc = STAILQ_HEAD_INITIALIZER(gc);
   enum GroupState state = GS_NONE;
   struct Address *addr = NULL;
   char *estr = NULL;
@@ -1288,7 +1288,7 @@ static int parse_ignore(struct Buffer *buf, struct Buffer *s,
 static int parse_lists(struct Buffer *buf, struct Buffer *s, unsigned long data,
                        struct Buffer *err)
 {
-  struct GroupContextHead gc = STAILQ_HEAD_INITIALIZER(gc);
+  struct GroupList gc = STAILQ_HEAD_INITIALIZER(gc);
 
   do
   {
@@ -1963,7 +1963,7 @@ static int parse_subjectrx_list(struct Buffer *buf, struct Buffer *s,
 static int parse_subscribe(struct Buffer *buf, struct Buffer *s,
                            unsigned long data, struct Buffer *err)
 {
-  struct GroupContextHead gc = STAILQ_HEAD_INITIALIZER(gc);
+  struct GroupList gc = STAILQ_HEAD_INITIALIZER(gc);
 
   do
   {
