@@ -407,6 +407,8 @@ int pgp_class_application_handler(struct Body *m, struct State *s)
   long bytes;
   LOFF_T last_pos, offset;
   char buf[HUGE_STRING];
+  char pgpoutfile[PATH_MAX];
+  char pgperrfile[PATH_MAX];
   char tmpfname[PATH_MAX];
   FILE *pgpout = NULL, *pgpin = NULL, *pgperr = NULL;
   FILE *tmpfp = NULL;
@@ -508,21 +510,25 @@ int pgp_class_application_handler(struct Body *m, struct State *s)
       /* Invoke PGP if needed */
       if (!clearsign || (s->flags & MUTT_VERIFY))
       {
-        pgpout = mutt_file_mkstemp();
+        mutt_mktemp(pgpoutfile, sizeof(pgpoutfile));
+        pgpout = mutt_file_fopen(pgpoutfile, "w+");
         if (!pgpout)
         {
-          mutt_perror("mutt_file_mkstemp() failed!");
+          mutt_perror(pgpoutfile);
           rc = -1;
           goto out;
         }
 
-        pgperr = mutt_file_mkstemp();
-        if (!pgperr)
+        unlink(pgpoutfile);
+
+        mutt_mktemp(pgperrfile, sizeof(pgperrfile));
+        if ((pgperr = mutt_file_fopen(pgperrfile, "w+")) == NULL)
         {
-          mutt_perror("mutt_file_mkstemp() failed!");
+          mutt_perror(pgperrfile);
           rc = -1;
           goto out;
         }
+        unlink(pgperrfile);
 
         thepid = pgp_invoke_decode(&pgpin, NULL, NULL, -1, fileno(pgpout),
                                    fileno(pgperr), tmpfname, (needpass != 0));
@@ -799,8 +805,8 @@ int pgp_class_check_traditional(FILE *fp, struct Body *b, bool just_one)
  */
 int pgp_class_verify_one(struct Body *sigbdy, struct State *s, const char *tempfile)
 {
-  char sigfile[PATH_MAX];
-  FILE *pgpout = NULL;
+  char sigfile[PATH_MAX], pgperrfile[PATH_MAX];
+  FILE *pgpout = NULL, *pgperr = NULL;
   pid_t thepid;
   int badsig = -1;
 
@@ -817,10 +823,11 @@ int pgp_class_verify_one(struct Body *sigbdy, struct State *s, const char *tempf
   mutt_file_copy_bytes(s->fpin, fp, sigbdy->length);
   mutt_file_fclose(&fp);
 
-  FILE *pgperr = mutt_file_mkstemp();
+  mutt_mktemp(pgperrfile, sizeof(pgperrfile));
+  pgperr = mutt_file_fopen(pgperrfile, "w+");
   if (!pgperr)
   {
-    mutt_perror("mutt_file_mkstemp() failed!");
+    mutt_perror(pgperrfile);
     unlink(sigfile);
     return -1;
   }
@@ -852,6 +859,7 @@ int pgp_class_verify_one(struct Body *sigbdy, struct State *s, const char *tempf
   state_attach_puts(_("[-- End of PGP output --]\n\n"), s);
 
   mutt_file_unlink(sigfile);
+  mutt_file_unlink(pgperrfile);
 
   mutt_debug(1, "returning %d.\n", badsig);
 
@@ -915,16 +923,19 @@ static struct Body *pgp_decrypt_part(struct Body *a, struct State *s,
   FILE *pgpin = NULL, *pgpout = NULL, *pgptmp = NULL;
   struct stat info;
   struct Body *tattach = NULL;
+  char pgperrfile[PATH_MAX];
   char pgptmpfile[PATH_MAX];
   pid_t thepid;
   int rv;
 
-  FILE *pgperr = mutt_file_mkstemp();
+  mutt_mktemp(pgperrfile, sizeof(pgperrfile));
+  FILE *pgperr = mutt_file_fopen(pgperrfile, "w+");
   if (!pgperr)
   {
-    mutt_perror("mutt_file_mkstemp() failed!");
+    mutt_perror(pgperrfile);
     return NULL;
   }
+  unlink(pgperrfile);
 
   mutt_mktemp(pgptmpfile, sizeof(pgptmpfile));
   pgptmp = mutt_file_fopen(pgptmpfile, "w");
@@ -1037,6 +1048,7 @@ static struct Body *pgp_decrypt_part(struct Body *a, struct State *s,
  */
 int pgp_class_decrypt_mime(FILE *fpin, FILE **fpout, struct Body *b, struct Body **cur)
 {
+  char tempfile[PATH_MAX];
   struct State s = { 0 };
   struct Body *p = b;
   bool need_decode = false;
@@ -1064,12 +1076,14 @@ int pgp_class_decrypt_mime(FILE *fpin, FILE **fpout, struct Body *b, struct Body
     saved_offset = b->offset;
     saved_length = b->length;
 
-    decoded_fp = mutt_file_mkstemp();
+    mutt_mktemp(tempfile, sizeof(tempfile));
+    decoded_fp = mutt_file_fopen(tempfile, "w+");
     if (!decoded_fp)
     {
-      mutt_perror("mutt_file_mkstemp() failed!");
+      mutt_perror(tempfile);
       return -1;
     }
+    unlink(tempfile);
 
     fseeko(s.fpin, b->offset, SEEK_SET);
     s.fpout = decoded_fp;
@@ -1084,13 +1098,15 @@ int pgp_class_decrypt_mime(FILE *fpin, FILE **fpout, struct Body *b, struct Body
     s.fpout = 0;
   }
 
-  *fpout = mutt_file_mkstemp();
+  mutt_mktemp(tempfile, sizeof(tempfile));
+  *fpout = mutt_file_fopen(tempfile, "w+");
   if (!*fpout)
   {
-    mutt_perror("mutt_file_mkstemp() failed!");
+    mutt_perror(tempfile);
     rc = -1;
     goto bail;
   }
+  unlink(tempfile);
 
   *cur = pgp_decrypt_part(b, &s, *fpout, p);
   if (!*cur)
@@ -1114,14 +1130,15 @@ bail:
  */
 int pgp_class_encrypted_handler(struct Body *a, struct State *s)
 {
+  char tempfile[PATH_MAX];
   FILE *fpin = NULL;
   struct Body *tattach = NULL;
   int rc = 0;
 
-  FILE *fpout = mutt_file_mkstemp();
+  mutt_mktemp(tempfile, sizeof(tempfile));
+  FILE *fpout = mutt_file_fopen(tempfile, "w+");
   if (!fpout)
   {
-    mutt_perror("mutt_file_mkstemp() failed!");
     if (s->flags & MUTT_DISPLAY)
       state_attach_puts(_("[-- Error: could not create temporary file! --]\n"), s);
     return -1;
@@ -1173,6 +1190,7 @@ int pgp_class_encrypted_handler(struct Body *a, struct State *s)
   }
 
   mutt_file_fclose(&fpout);
+  mutt_file_unlink(tempfile);
 
   return rc;
 }
@@ -1436,9 +1454,9 @@ char *pgp_class_find_keys(struct Address *addrlist, bool oppenc_mode)
 struct Body *pgp_class_encrypt_message(struct Body *a, char *keylist, bool sign)
 {
   char buf[LONG_STRING];
-  char tempfile[PATH_MAX];
+  char tempfile[PATH_MAX], pgperrfile[PATH_MAX];
   char pgpinfile[PATH_MAX];
-  FILE *pgpin = NULL, *fptmp = NULL;
+  FILE *pgpin = NULL, *pgperr = NULL, *fptmp = NULL;
   struct Body *t = NULL;
   int err = 0;
   int empty = 0;
@@ -1452,14 +1470,16 @@ struct Body *pgp_class_encrypt_message(struct Body *a, char *keylist, bool sign)
     return NULL;
   }
 
-  FILE *pgperr = mutt_file_mkstemp();
+  mutt_mktemp(pgperrfile, sizeof(pgperrfile));
+  pgperr = mutt_file_fopen(pgperrfile, "w+");
   if (!pgperr)
   {
-    mutt_perror("mutt_file_mkstemp() failed!");
+    mutt_perror(pgperrfile);
     unlink(tempfile);
     mutt_file_fclose(&fpout);
     return NULL;
   }
+  unlink(pgperrfile);
 
   mutt_mktemp(pgpinfile, sizeof(pgpinfile));
   fptmp = mutt_file_fopen(pgpinfile, "w");
@@ -1567,12 +1587,14 @@ struct Body *pgp_class_traditional_encryptsign(struct Body *a, int flags, char *
   struct Body *b = NULL;
 
   char pgpoutfile[PATH_MAX];
+  char pgperrfile[PATH_MAX];
   char pgpinfile[PATH_MAX];
 
   char body_charset[STRING];
   char *from_charset = NULL;
   const char *send_charset = NULL;
 
+  FILE *pgpout = NULL, *pgperr = NULL, *pgpin = NULL;
   FILE *fp = NULL;
 
   bool empty = false;
@@ -1595,7 +1617,7 @@ struct Body *pgp_class_traditional_encryptsign(struct Body *a, int flags, char *
   }
 
   mutt_mktemp(pgpinfile, sizeof(pgpinfile));
-  FILE *pgpin = mutt_file_fopen(pgpinfile, "w");
+  pgpin = mutt_file_fopen(pgpinfile, "w");
   if (!pgpin)
   {
     mutt_perror(pgpinfile);
@@ -1641,20 +1663,21 @@ struct Body *pgp_class_traditional_encryptsign(struct Body *a, int flags, char *
   mutt_file_fclose(&pgpin);
 
   mutt_mktemp(pgpoutfile, sizeof(pgpoutfile));
-  FILE *pgpout = mutt_file_fopen(pgpoutfile, "w+");
-  FILE *pgperr = mutt_file_mkstemp();
-  if (!pgpout || !pgperr)
+  mutt_mktemp(pgperrfile, sizeof(pgperrfile));
+  if ((pgpout = mutt_file_fopen(pgpoutfile, "w+")) == NULL ||
+      (pgperr = mutt_file_fopen(pgperrfile, "w+")) == NULL)
   {
-    mutt_perror(pgpout ? "mutt_file_mkstemp() failed!" : pgpoutfile);
+    mutt_perror(pgpout ? pgperrfile : pgpoutfile);
     unlink(pgpinfile);
     if (pgpout)
     {
       mutt_file_fclose(&pgpout);
       unlink(pgpoutfile);
     }
-    mutt_file_fclose(&pgperr);
     return NULL;
   }
+
+  unlink(pgperrfile);
 
   thepid = pgp_invoke_traditional(&pgpin, NULL, NULL, -1, fileno(pgpout),
                                   fileno(pgperr), pgpinfile, keylist, flags);
