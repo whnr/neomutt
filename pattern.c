@@ -41,6 +41,7 @@
 #include "context.h"
 #include "copy.h"
 #include "curs_lib.h"
+#include "filter.h"
 #include "globals.h"
 #include "group.h"
 #include "handler.h"
@@ -234,6 +235,80 @@ static bool eat_regex(struct Pattern *pat, struct Buffer *s, struct Buffer *err)
     FREE(&buf.data);
   }
 
+  return true;
+}
+
+/**
+ * eat_query - Parse a query for an external search program
+ * @param pat  Pattern to match
+ * @param s   String to parse
+ * @param err Buffer for error messages
+ * @retval true If the pattern was read succesfully
+ */
+static bool eat_query(struct Pattern *pat, struct Buffer *s, struct Buffer *err)
+{
+  struct Buffer cmd_buf;
+  struct Buffer tok_buf;
+  int result;
+  FILE *fp = NULL;
+  pid_t pid;
+  char* oldline = NULL;
+  char* newline;
+  char* dupline;
+  char* nows;
+  size_t lsz;
+
+  if (!(SearchCommand && *SearchCommand)) {
+    mutt_buffer_printf(err, "%s", _("No search command defined"));
+    return false;
+  }
+
+  char *pexpr = s->dptr;
+  mutt_buffer_init(&tok_buf);
+  result = mutt_extract_token(&tok_buf, s, MUTT_TOKEN_PATTERN | MUTT_TOKEN_COMMENT);
+  if (result != 0 || !tok_buf.data)
+  {
+    mutt_buffer_printf(err, _("Error in expression: %s"), pexpr);
+    return false;
+  }
+  if (!*tok_buf.data)
+  {
+    mutt_buffer_printf(err, "%s", _("Empty expression"));
+    FREE(&tok_buf.data);
+    return false;
+  }
+
+  mutt_buffer_init(&cmd_buf);
+  mutt_buffer_addstr(&cmd_buf, SearchCommand);
+  mutt_buffer_addch(&cmd_buf, ' ');
+  mutt_buffer_addstr(&cmd_buf, tok_buf.data);
+  FREE(&tok_buf.data);
+
+  mutt_message(_("Running search command..."));
+  pat->ismulti = 1;
+  mutt_list_clear(&pat->p.multi_cases);
+  pid = mutt_create_filter(cmd_buf.data, NULL, &fp, NULL);
+  if (pid < 0)
+  {
+    mutt_buffer_printf(err, "unable to fork command: %s\n", cmd_buf.data);
+    FREE(&cmd_buf.data);
+    return false;
+  }
+  
+  while ((newline = mutt_file_read_line(oldline, &lsz, fp, NULL, 0)) != NULL) {
+    oldline = newline;
+    /* strip whitespace, so we don't need more crufty scripting */
+    nows = mutt_str_skip_whitespace(newline);
+    if (!*nows)
+      continue;
+    mutt_str_remove_trailing_ws(nows);
+    dupline = mutt_str_strdup(nows);
+    mutt_list_insert_tail(&pat->p.multi_cases, dupline);
+  }
+
+  mutt_file_fclose(&fp);
+  mutt_wait_filter(pid);
+  FREE(&cmd_buf.data);
   return true;
 }
 
@@ -954,7 +1029,9 @@ static bool eat_message_range(struct Pattern *pat, struct Buffer *s, struct Buff
  */
 static int patmatch(const struct Pattern *pat, const char *buf)
 {
-  if (pat->stringmatch)
+  if (pat->ismulti)
+    return (mutt_list_find(&pat->p.multi_cases, buf) == NULL);
+  else if (pat->stringmatch)
     return pat->ign_case ? !strcasestr(buf, pat->p.str) : !strstr(buf, pat->p.str);
   else if (pat->groupmatch)
     return !mutt_group_match(pat->p.g, buf);
@@ -1141,6 +1218,7 @@ static const struct PatternFlags Flags[] = {
   { 'h', MUTT_HEADER,          MUTT_FULL_MSG, eat_regex },
   { 'H', MUTT_HORMEL,          0,             eat_regex },
   { 'i', MUTT_ID,              0,             eat_regex },
+  { 'I', MUTT_ID_EXTERNAL,     0,             eat_query },
   { 'k', MUTT_PGP_KEY,         0,             NULL },
   { 'l', MUTT_LIST,            0,             NULL },
   { 'L', MUTT_ADDRESS,         0,             eat_regex },
@@ -1228,7 +1306,9 @@ void mutt_pattern_free(struct Pattern **pat)
     tmp = *pat;
     *pat = (*pat)->next;
 
-    if (tmp->stringmatch)
+    if (tmp->ismulti)
+      mutt_list_free(&tmp->p.multi_cases);
+    else if (tmp->stringmatch)
       FREE(&tmp->p.str);
     else if (tmp->groupmatch)
       tmp->p.g = NULL;
@@ -1913,6 +1993,7 @@ int mutt_pattern_exec(struct Pattern *pat, enum PatternExecFlag flags,
         return 0;
       return pat->not^(e->env->subject &&patmatch(pat, e->env->subject) == 0);
     case MUTT_ID:
+    case MUTT_ID_EXTERNAL:
       if (!e->env)
         return 0;
       return pat->not^(e->env->message_id &&patmatch(pat, e->env->message_id) == 0);
