@@ -811,14 +811,14 @@ cleanup:
 /**
  * maildir_add_to_context - Add the Maildir list to the Mailbox
  * @param m   Mailbox
- * @param ctx Mailbox
  * @param md  Maildir list to copy
- * @retval true If there's new mail
+ * @retval num Number of new emails
+ * @retval 0   Error
  */
-static bool maildir_add_to_context(struct Mailbox *m, struct Context *ctx, struct Maildir *md)
+static int maildir_add_to_context(struct Mailbox *m, struct Maildir *md)
 {
   if (!m)
-    return false;
+    return 0;
 
   int oldmsgcount = m->msg_count;
 
@@ -856,24 +856,21 @@ static bool maildir_add_to_context(struct Mailbox *m, struct Context *ctx, struc
   }
 
   if (m->msg_count > oldmsgcount)
-  {
-    mx_update_context(ctx, m->msg_count - oldmsgcount);
-    return true;
-  }
-  return false;
+    return m->msg_count > oldmsgcount;
+
+  return 0;
 }
 
 /**
  * maildir_move_to_context - Copy the Maildir list to the Mailbox
  * @param m   Mailbox
- * @param ctx Mailbox
  * @param md  Maildir list to copy, then free
- * @retval 1 If there's new mail
- * @retval 0 Otherwise
+ * @retval num Number of new emails
+ * @retval 0   Error
  */
-static int maildir_move_to_context(struct Mailbox *m, struct Context *ctx, struct Maildir **md)
+static int maildir_move_to_context(struct Mailbox *m, struct Maildir **md)
 {
-  int r = maildir_add_to_context(m, ctx, *md);
+  int r = maildir_add_to_context(m, *md);
   maildir_free_maildir(md);
   return r;
 }
@@ -1217,14 +1214,13 @@ static void maildir_delayed_parsing(struct Mailbox *m, struct Maildir **md,
 
 /**
  * mh_read_dir - Read a MH/maildir style mailbox
- * @param m   Mailbox
- * @param ctx    Mailbox
+ * @param m      Mailbox
  * @param subdir NULL for MH mailboxes,
  *               otherwise the subdir of the maildir mailbox to read from
  * @retval  0 Success
  * @retval -1 Failure
  */
-static int mh_read_dir(struct Mailbox *m, struct Context *ctx, const char *subdir)
+static int mh_read_dir(struct Mailbox *m, const char *subdir)
 {
   if (!m)
     return -1;
@@ -1275,7 +1271,7 @@ static int mh_read_dir(struct Mailbox *m, struct Context *ctx, const char *subdi
     mhs_free_sequences(&mhs);
   }
 
-  maildir_move_to_context(m, ctx, &md);
+  maildir_move_to_context(m, &md);
 
   if (!mdata->mh_umask)
     mdata->mh_umask = mh_umask(m);
@@ -1286,16 +1282,15 @@ static int mh_read_dir(struct Mailbox *m, struct Context *ctx, const char *subdi
 /**
  * maildir_read_dir - Read a Maildir style mailbox
  * @param m   Mailbox
- * @param ctx Mailbox
  * @retval  0 Success
  * @retval -1 Failure
  */
-static int maildir_read_dir(struct Mailbox *m, struct Context *ctx)
+static int maildir_read_dir(struct Mailbox *m)
 {
   /* maildir looks sort of like MH, except that there are two subdirectories
    * of the main folder path from which to read messages
    */
-  if ((mh_read_dir(m, ctx, "new") == -1) || (mh_read_dir(m, ctx, "cur") == -1))
+  if ((mh_read_dir(m, "new") == -1) || (mh_read_dir(m, "cur") == -1))
     return -1;
 
   return 0;
@@ -2380,7 +2375,7 @@ int maildir_ac_add(struct Account *a, struct Mailbox *m)
  */
 static int maildir_mbox_open(struct Mailbox *m, struct Context *ctx)
 {
-  return maildir_read_dir(m, ctx);
+  return maildir_read_dir(m);
 }
 
 /**
@@ -2458,7 +2453,7 @@ static int maildir_mbox_check(struct Context *ctx, int *index_hint)
   int changed = 0;            /* bitmask representing which subdirectories
                                  have changed.  0x1 = new, 0x2 = cur */
   bool occult = false;        /* messages were removed from the mailbox */
-  int have_new = 0;           /* messages were added to the mailbox */
+  int num_new = 0;            /* number of new messages added to the mailbox */
   bool flags_changed = false; /* message flags were changed in the mailbox */
   struct Maildir *md = NULL;  /* list of messages in the mailbox */
   struct Maildir **last = NULL, *p = NULL;
@@ -2608,13 +2603,15 @@ static int maildir_mbox_check(struct Context *ctx, int *index_hint)
   maildir_delayed_parsing(m, &md, NULL);
 
   /* Incorporate new messages */
-  have_new = maildir_move_to_context(m, ctx, &md);
+  num_new = maildir_move_to_context(m, &md);
+  if (num_new > 0)
+    mx_update_context(ctx, num_new);
 
   mutt_buffer_pool_release(&buf);
 
   if (occult)
     return MUTT_REOPENED;
-  if (have_new)
+  if (num_new > 0)
     return MUTT_NEW_MAIL;
   if (flags_changed)
     return MUTT_FLAGS;
@@ -2791,7 +2788,7 @@ int maildir_path_parent(char *buf, size_t buflen)
  */
 static int mh_mbox_open(struct Mailbox *m, struct Context *ctx)
 {
-  return mh_read_dir(m, ctx, NULL);
+  return mh_read_dir(m, NULL);
 }
 
 /**
@@ -2846,7 +2843,8 @@ static int mh_mbox_check(struct Context *ctx, int *index_hint)
 
   char buf[PATH_MAX];
   struct stat st, st_cur;
-  bool modified = false, have_new = false, occult = false, flags_changed = false;
+  bool modified = false, occult = false, flags_changed = false;
+  int num_new = 0;
   struct Maildir *md = NULL, *p = NULL;
   struct Maildir **last = NULL;
   struct MhSequences mhs = { 0 };
@@ -2955,11 +2953,13 @@ static int mh_mbox_check(struct Context *ctx, int *index_hint)
     maildir_update_tables(ctx, index_hint);
 
   /* Incorporate new messages */
-  have_new = maildir_move_to_context(m, ctx, &md);
+  num_new = maildir_move_to_context(m, &md);
+  if (num_new > 0)
+    mx_update_context(ctx, num_new);
 
   if (occult)
     return MUTT_REOPENED;
-  if (have_new)
+  if (num_new > 0)
     return MUTT_NEW_MAIL;
   if (flags_changed)
     return MUTT_FLAGS;
