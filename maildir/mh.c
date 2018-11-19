@@ -810,16 +810,15 @@ cleanup:
 
 /**
  * maildir_add_to_context - Add the Maildir list to the Mailbox
+ * @param m   Mailbox
  * @param ctx Mailbox
  * @param md  Maildir list to copy
  * @retval true If there's new mail
  */
-static bool maildir_add_to_context(struct Context *ctx, struct Maildir *md)
+static bool maildir_add_to_context(struct Mailbox *m, struct Context *ctx, struct Maildir *md)
 {
-  if (!ctx || !ctx->mailbox)
+  if (!m)
     return false;
-
-  struct Mailbox *m = ctx->mailbox;
 
   int oldmsgcount = m->msg_count;
 
@@ -866,14 +865,15 @@ static bool maildir_add_to_context(struct Context *ctx, struct Maildir *md)
 
 /**
  * maildir_move_to_context - Copy the Maildir list to the Mailbox
+ * @param m   Mailbox
  * @param ctx Mailbox
  * @param md  Maildir list to copy, then free
  * @retval 1 If there's new mail
  * @retval 0 Otherwise
  */
-static int maildir_move_to_context(struct Context *ctx, struct Maildir **md)
+static int maildir_move_to_context(struct Mailbox *m, struct Context *ctx, struct Maildir **md)
 {
-  int r = maildir_add_to_context(ctx, *md);
+  int r = maildir_add_to_context(m, ctx, *md);
   maildir_free_maildir(md);
   return r;
 }
@@ -1217,18 +1217,17 @@ static void maildir_delayed_parsing(struct Mailbox *m, struct Maildir **md,
 
 /**
  * mh_read_dir - Read a MH/maildir style mailbox
+ * @param m   Mailbox
  * @param ctx    Mailbox
  * @param subdir NULL for MH mailboxes,
  *               otherwise the subdir of the maildir mailbox to read from
  * @retval  0 Success
  * @retval -1 Failure
  */
-static int mh_read_dir(struct Context *ctx, const char *subdir)
+static int mh_read_dir(struct Mailbox *m, struct Context *ctx, const char *subdir)
 {
-  if (!ctx || !ctx->mailbox)
+  if (!m)
     return -1;
-
-  struct Mailbox *m = ctx->mailbox;
 
   struct Maildir *md = NULL;
   struct MhSequences mhs = { 0 };
@@ -1276,7 +1275,7 @@ static int mh_read_dir(struct Context *ctx, const char *subdir)
     mhs_free_sequences(&mhs);
   }
 
-  maildir_move_to_context(ctx, &md);
+  maildir_move_to_context(m, ctx, &md);
 
   if (!mdata->mh_umask)
     mdata->mh_umask = mh_umask(m);
@@ -1286,16 +1285,17 @@ static int mh_read_dir(struct Context *ctx, const char *subdir)
 
 /**
  * maildir_read_dir - Read a Maildir style mailbox
+ * @param m   Mailbox
  * @param ctx Mailbox
  * @retval  0 Success
  * @retval -1 Failure
  */
-static int maildir_read_dir(struct Context *ctx)
+static int maildir_read_dir(struct Mailbox *m, struct Context *ctx)
 {
   /* maildir looks sort of like MH, except that there are two subdirectories
    * of the main folder path from which to read messages
    */
-  if ((mh_read_dir(ctx, "new") == -1) || (mh_read_dir(ctx, "cur") == -1))
+  if ((mh_read_dir(m, ctx, "new") == -1) || (mh_read_dir(m, ctx, "cur") == -1))
     return -1;
 
   return 0;
@@ -2378,9 +2378,9 @@ int maildir_ac_add(struct Account *a, struct Mailbox *m)
 /**
  * maildir_mbox_open - Implements MxOps::mbox_open()
  */
-static int maildir_mbox_open(struct Context *ctx)
+static int maildir_mbox_open(struct Mailbox *m, struct Context *ctx)
 {
-  return maildir_read_dir(ctx);
+  return maildir_read_dir(m, ctx);
 }
 
 /**
@@ -2608,7 +2608,7 @@ static int maildir_mbox_check(struct Context *ctx, int *index_hint)
   maildir_delayed_parsing(m, &md, NULL);
 
   /* Incorporate new messages */
-  have_new = maildir_move_to_context(ctx, &md);
+  have_new = maildir_move_to_context(m, ctx, &md);
 
   mutt_buffer_pool_release(&buf);
 
@@ -2789,9 +2789,9 @@ int maildir_path_parent(char *buf, size_t buflen)
 /**
  * mh_mbox_open - Implements MxOps::mbox_open()
  */
-static int mh_mbox_open(struct Context *ctx)
+static int mh_mbox_open(struct Mailbox *m, struct Context *ctx)
 {
-  return mh_read_dir(ctx, NULL);
+  return mh_read_dir(m, ctx, NULL);
 }
 
 /**
@@ -2955,7 +2955,7 @@ static int mh_mbox_check(struct Context *ctx, int *index_hint)
     maildir_update_tables(ctx, index_hint);
 
   /* Incorporate new messages */
-  have_new = maildir_move_to_context(ctx, &md);
+  have_new = maildir_move_to_context(m, ctx, &md);
 
   if (occult)
     return MUTT_REOPENED;
