@@ -822,7 +822,7 @@ void imap_expunge_mailbox(struct ImapAccountData *adata)
 
   old_sort = Sort;
   Sort = SORT_ORDER;
-  mutt_sort_headers(adata->ctx, false);
+  mutt_sort_headers(mdata->ctx, false);
 
   for (int i = 0; i < adata->mailbox->msg_count; i++)
   {
@@ -882,9 +882,9 @@ void imap_expunge_mailbox(struct ImapAccountData *adata)
 
   /* We may be called on to expunge at any time. We can't rely on the caller
    * to always know to rethread */
-  mx_update_tables(adata->ctx, false);
+  mx_update_tables(mdata->ctx, false);
   Sort = old_sort;
-  mutt_sort_headers(adata->ctx, true);
+  mutt_sort_headers(mdata->ctx, true);
 }
 
 /**
@@ -2214,8 +2214,14 @@ static int imap_mbox_open(struct Context *ctx)
   // mailbox->account->adata->mailbox
   // this is used only by imap_mbox_close() to detect if the
   // adata/mailbox is a normal or append one, looks a bit dirty
-  adata->ctx = ctx;
+  if(adata->previous_mailbox)
+  {
+    mutt_debug(1, "Cannot use more than two mailbox at the same time\n");
+    return -1;
+  }
+  adata->previous_mailbox = adata->mailbox;
   adata->mailbox = m;
+  mdata->ctx = ctx;
 
   /* clear mailbox status */
   adata->status = 0;
@@ -2297,9 +2303,10 @@ static int imap_mbox_close(struct Context *ctx)
   struct Mailbox *m = ctx->mailbox;
 
   struct ImapAccountData *adata = imap_adata_get(m);
+  struct ImapMboxData *mdata = imap_mdata_get(m);
 
   /* Check to see if the mailbox is actually open */
-  if (!adata)
+  if (!adata || !mdata)
     return 0;
 
   /* imap_mbox_open_append() borrows the struct ImapAccountData temporarily,
@@ -2310,7 +2317,7 @@ static int imap_mbox_close(struct Context *ctx)
    * mailbox and should clean up adata.  Otherwise, we don't want to
    * touch adata - it's still being used.
    */
-  if (ctx == adata->ctx)
+  if (adata->mailbox == m)
   {
     if (adata->status != IMAP_FATAL && adata->state >= IMAP_SELECTED)
     {
@@ -2324,8 +2331,14 @@ static int imap_mbox_close(struct Context *ctx)
       adata->state = IMAP_AUTHENTICATED;
     }
 
-    adata->mailbox = NULL;
-    adata->ctx = NULL;
+    if (adata->previous_mailbox)
+    {
+      adata->mailbox = adata->previous_mailbox;
+      adata->previous_mailbox = NULL;
+      imap_select_mailbox(adata->mailbox);
+    }
+    else
+      adata->mailbox = NULL;
 
     imap_mdata_cache_reset(m->mdata);
   }

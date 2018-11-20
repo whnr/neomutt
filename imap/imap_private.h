@@ -225,8 +225,8 @@ struct ImapAccountData
   struct Buffer *cmdbuf;
 
   char delim;
-  struct Context *ctx;
-  struct Mailbox *mailbox;     /* Current selected mailbox */
+  struct Mailbox *mailbox;          /* Current selected mailbox */
+  struct Mailbox *previous_mailbox; /* Previous selected mailbox */
 };
 
 /**
@@ -239,6 +239,8 @@ struct ImapMboxData
   char *name;        /**< Mailbox name */
   char *munge_name;  /**< Munged version of the mailbox name */
   char *real_name;   /**< Original Mailbox name, e.g.: INBOX can be just \0 */
+
+  struct Context *ctx;
 
   unsigned char reopen;        /**< Flags, e.g. #IMAP_REOPEN_ALLOW */
   unsigned short check_status; /**< Flags, e.g. #IMAP_NEWMAIL_PENDING */
