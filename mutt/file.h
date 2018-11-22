@@ -35,6 +35,18 @@ extern char *Tmpdir;
 #define MUTT_CONT (1 << 0) /**< \-continuation */
 #define MUTT_EOL  (1 << 1) /**< don't strip `\n` / `\r\n` */
 
+/* State record for mutt_file_iter_line() */
+struct mutt_file_iter {
+  char* line;                   /**< the line data */
+  size_t size;                  /**< allocated size of line data */
+  int line_num;                 /**< line number */
+};
+
+/* Type of mapping functions for mutt_file_map_lines().
+ * d is the usual "user data" passed to callbacks.
+ */
+typedef bool (*mutt_file_map_func)(char *line, int line_num, void *user_data);
+
 int         mutt_file_check_empty(const char *path);
 int         mutt_file_chmod(const char *path, mode_t mode);
 int         mutt_file_chmod_add(const char *path, mode_t mode);
@@ -58,6 +70,8 @@ int         mutt_file_open(const char *path, int flags);
 size_t      mutt_file_quote_filename(const char *filename, char *buf, size_t buflen);
 char *      mutt_file_read_keyword(const char *file, char *buf, size_t buflen);
 char *      mutt_file_read_line(char *s, size_t *size, FILE *fp, int *line, int flags);
+bool        mutt_file_iter_line(struct mutt_file_iter *iter, FILE *fp, int flags);
+bool        mutt_file_map_lines(mutt_file_map_func func, void *user_data, FILE *fp, int flags);
 int         mutt_file_rename(char *oldfile, char *newfile);
 int         mutt_file_rmtree(const char *path);
 int         mutt_file_safe_rename(const char *src, const char *target);
