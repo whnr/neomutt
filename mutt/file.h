@@ -35,7 +35,9 @@ extern char *Tmpdir;
 #define MUTT_CONT (1 << 0) /**< \-continuation */
 #define MUTT_EOL  (1 << 1) /**< don't strip `\n` / `\r\n` */
 
-/* State record for mutt_file_iter_line() */
+/**
+ * struct MuttFileIter - State record for mutt_file_iter_line()
+ */
 struct MuttFileIter
 {
   char *line;   /**< the line data */
@@ -43,8 +45,13 @@ struct MuttFileIter
   int line_num; /**< line number */
 };
 
-/* Type of mapping functions for mutt_file_map_lines().
- * d is the usual "user data" passed to callbacks.
+/**
+ * typedef mutt_file_map_t - Callback function for mutt_file_map_lines()
+ * @param line      Line of text read
+ * @param line_num  Line number
+ * @param user_data Data to pass to the callback function
+ * @retval true  Read was successful
+ * @retval false Abort the reading and free the string
  */
 typedef bool (*mutt_file_map_t)(char *line, int line_num, void *user_data);
 

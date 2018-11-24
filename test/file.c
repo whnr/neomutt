@@ -13,15 +13,18 @@ static const char *lines[] = {
 };
 
 #define NUM_TEST_LINES (sizeof(lines) / sizeof(const char *) - 1)
+#define BOOLIFY(x) ((x) ? "true" : "false")
+#define SET_UP() (set_up(__func__))
+#define TEAR_DOWN(fp) (tear_down((fp), __func__))
 
 static FILE *set_up(const char *funcname)
 {
   int res = 0;
   FILE *fp = tmpfile();
   const char **linep = NULL;
-  if (fp == NULL)
+  if (!fp)
     goto err1;
-  for (linep = lines; *linep != NULL; linep++)
+  for (linep = lines; *linep; linep++)
   {
     res = fputs(*linep, fp);
     if (res == EOF)
@@ -39,8 +42,6 @@ err1:
   return NULL;
 }
 
-#define SET_UP() (set_up(__FUNCTION__))
-
 static void tear_down(FILE *fp, const char *funcname)
 {
   int res = fclose(fp);
@@ -48,17 +49,14 @@ static void tear_down(FILE *fp, const char *funcname)
     TEST_MSG("Failed to tear down test %s", funcname);
 }
 
-#define TEAR_DOWN(fp) (tear_down((fp), __FUNCTION__))
-
 void test_file_iter_line(void)
 {
   FILE *fp = SET_UP();
-  if (fp == NULL)
+  if (!fp)
     return;
   struct MuttFileIter iter = { 0 };
-  int i;
   bool res;
-  for (i = 0; i < NUM_TEST_LINES; i++)
+  for (int i = 0; i < NUM_TEST_LINES; i++)
   {
     res = mutt_file_iter_line(&iter, fp, 0);
     if (!TEST_CHECK(res))
@@ -97,15 +95,12 @@ static bool mapping_func(char *line, int line_num, void *user_data)
   return (line_num < *p_last_line_num);
 }
 
-#define BOOLIFY(x) ((x) ? "true" : "false")
-
 static void test_file_map_lines_breaking_after(int last_line, bool expected)
 {
-  bool res;
   FILE *fp = SET_UP();
-  if (fp == NULL)
+  if (!fp)
     return;
-  res = mutt_file_map_lines(mapping_func, &last_line, fp, 0);
+  bool res = mutt_file_map_lines(mapping_func, &last_line, fp, 0);
   if (!TEST_CHECK(res == expected))
   {
     TEST_MSG("Expected: %s", BOOLIFY(expected));
