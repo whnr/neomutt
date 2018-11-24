@@ -699,7 +699,8 @@ char *mutt_file_read_line(char *s, size_t *size, FILE *fp, int *line, int flags)
  * the eternal C loop initialization ugliness.  Use like this:
  *
  * struct mutt_file_iter iter = { 0 };
- * while (mutt_file_iter_line(&iter, fp, flags)) {
+ * while (mutt_file_iter_line(&iter, fp, flags))
+ * {
  *   do_stuff(iter.line, iter.line_num);
  * }
  */
@@ -725,8 +726,10 @@ bool mutt_file_iter_line(struct mutt_file_iter *iter, FILE *fp, int flags)
 bool mutt_file_map_lines(mutt_file_map_func func, void *user_data, FILE *fp, int flags)
 {
   struct mutt_file_iter iter = { 0 };
-  while (mutt_file_iter_line(&iter, fp, flags)) {
-    if (!(*func)(iter.line, iter.line_num, user_data)) {
+  while (mutt_file_iter_line(&iter, fp, flags))
+  {
+    if (!(*func)(iter.line, iter.line_num, user_data))
+    {
       FREE(&iter.line);
       return false;
     }

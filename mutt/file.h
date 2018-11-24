@@ -36,10 +36,11 @@ extern char *Tmpdir;
 #define MUTT_EOL  (1 << 1) /**< don't strip `\n` / `\r\n` */
 
 /* State record for mutt_file_iter_line() */
-struct mutt_file_iter {
-  char* line;                   /**< the line data */
-  size_t size;                  /**< allocated size of line data */
-  int line_num;                 /**< line number */
+struct mutt_file_iter
+{
+  char *line;   /**< the line data */
+  size_t size;  /**< allocated size of line data */
+  int line_num; /**< line number */
 };
 
 /* Type of mapping functions for mutt_file_map_lines().
@@ -62,7 +63,9 @@ int         mutt_file_fclose(FILE **f);
 FILE *      mutt_file_fopen(const char *path, const char *mode);
 int         mutt_file_fsync_close(FILE **f);
 long        mutt_file_get_size(const char *path);
+bool        mutt_file_iter_line(struct mutt_file_iter *iter, FILE *fp, int flags);
 int         mutt_file_lock(int fd, bool excl, bool timeout);
+bool        mutt_file_map_lines(mutt_file_map_func func, void *user_data, FILE *fp, int flags);
 int         mutt_file_mkdir(const char *path, mode_t mode);
 FILE *      mutt_file_mkstemp_full(const char *file, int line, const char *func);
 #define     mutt_file_mkstemp() mutt_file_mkstemp_full(__FILE__, __LINE__, __func__)
@@ -70,8 +73,6 @@ int         mutt_file_open(const char *path, int flags);
 size_t      mutt_file_quote_filename(const char *filename, char *buf, size_t buflen);
 char *      mutt_file_read_keyword(const char *file, char *buf, size_t buflen);
 char *      mutt_file_read_line(char *s, size_t *size, FILE *fp, int *line, int flags);
-bool        mutt_file_iter_line(struct mutt_file_iter *iter, FILE *fp, int flags);
-bool        mutt_file_map_lines(mutt_file_map_func func, void *user_data, FILE *fp, int flags);
 int         mutt_file_rename(char *oldfile, char *newfile);
 int         mutt_file_rmtree(const char *path);
 int         mutt_file_safe_rename(const char *src, const char *target);
