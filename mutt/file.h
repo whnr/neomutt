@@ -36,7 +36,7 @@ extern char *Tmpdir;
 #define MUTT_EOL  (1 << 1) /**< don't strip `\n` / `\r\n` */
 
 /* State record for mutt_file_iter_line() */
-struct mutt_file_iter
+struct MuttFileIter
 {
   char *line;   /**< the line data */
   size_t size;  /**< allocated size of line data */
@@ -46,7 +46,7 @@ struct mutt_file_iter
 /* Type of mapping functions for mutt_file_map_lines().
  * d is the usual "user data" passed to callbacks.
  */
-typedef bool (*mutt_file_map_func)(char *line, int line_num, void *user_data);
+typedef bool (*mutt_file_map_t)(char *line, int line_num, void *user_data);
 
 int         mutt_file_check_empty(const char *path);
 int         mutt_file_chmod(const char *path, mode_t mode);
@@ -63,9 +63,9 @@ int         mutt_file_fclose(FILE **f);
 FILE *      mutt_file_fopen(const char *path, const char *mode);
 int         mutt_file_fsync_close(FILE **f);
 long        mutt_file_get_size(const char *path);
-bool        mutt_file_iter_line(struct mutt_file_iter *iter, FILE *fp, int flags);
+bool        mutt_file_iter_line(struct MuttFileIter *iter, FILE *fp, int flags);
 int         mutt_file_lock(int fd, bool excl, bool timeout);
-bool        mutt_file_map_lines(mutt_file_map_func func, void *user_data, FILE *fp, int flags);
+bool        mutt_file_map_lines(mutt_file_map_t func, void *user_data, FILE *fp, int flags);
 int         mutt_file_mkdir(const char *path, mode_t mode);
 FILE *      mutt_file_mkstemp_full(const char *file, int line, const char *func);
 #define     mutt_file_mkstemp() mutt_file_mkstemp_full(__FILE__, __LINE__, __func__)

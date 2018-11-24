@@ -55,7 +55,7 @@ void test_file_iter_line(void)
   FILE *fp = SET_UP();
   if (fp == NULL)
     return;
-  struct mutt_file_iter iter = { 0 };
+  struct MuttFileIter iter = { 0 };
   int i;
   bool res;
   for (i = 0; i < NUM_TEST_LINES; i++)
